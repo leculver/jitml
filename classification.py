@@ -66,6 +66,7 @@ def to_dataframe(mch, core_root) -> DataFrame:
     return DataFrame(applied)
 
 def get_or_create_dataframe(mch, core_root) -> DataFrame:
+    """Gets or creates the DataFrame for the given mch file."""
     filename = f"{mch}.cse.csv"
     if os.path.exists(filename):
         return DataFrame.read_csv(filename)
@@ -79,7 +80,7 @@ def main(args):
     if not SuperPmiCache.exists(args.mch):
         print(f"Caching SuperPmi methods for {args.mch}, this may take several minutes...")
 
-    df = get_or_create_dataframe(args.mch, args.core_root)
+    get_or_create_dataframe(args.mch, args.core_root)
 
 
 if __name__ == '__main__':

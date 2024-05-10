@@ -60,27 +60,27 @@ class JitCseModel:
         probs = action_distribution.distribution.probs
         return probs.cpu().detach().numpy()[0]
 
-    def train(self, mch : str, core_root : str, training_methods : List[int], output_dir : str,
+    def train(self, spmi_context : SuperPmiContext, training_methods : List[int], output_dir : str,
               iterations = None, parallel = None, progress_bar = True,
               wrappers : Optional[List[gym.Wrapper]] = None) -> str:
         """Trains a model from scratch.
 
         Args:
-            pmi_context: The SuperPmiContext to use for training.
+            spmi_context: The SuperPmiContext to use for training.
             training_methods : The methods to train on.
             output_dir: The directory to save the model to.
             iterations: The number of iterations to train for.  Defaults to 100,000.
             parallel: The number of parallel environments to use.  Defaults to single-process (None).
             progress_bar: Whether to display a progress bar.  Defaults to True.
+            wrappers: A list of gym.Wrapper instances to wrap the environment with.
 
         Returns:
             The full path to the trained model.
         """
         os.makedirs(output_dir, exist_ok=True)
 
-        pmi_context = SuperPmiContext(mch=mch, core_root=core_root)
         def default_make_env():
-            env = JitCseEnv(pmi_context, training_methods)
+            env = JitCseEnv(spmi_context, training_methods)
             if wrappers:
                 for wrapper in wrappers:
                     env = wrapper(env)
