@@ -1,7 +1,12 @@
+.vscode
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Profiler
+*.prof
 
 # C extensions
 *.so
