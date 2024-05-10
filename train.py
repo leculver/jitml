@@ -4,7 +4,7 @@
 import os
 import argparse
 
-from jitml import SuperPmiCache, JitCseModel, OptimalCseWrapper, NormalizeFeaturesWrapper
+from jitml import SuperPmiContext, SuperPmiCache, JitCseModel, OptimalCseWrapper, NormalizeFeaturesWrapper
 
 def validate_core_root(core_root):
     """Validates and returns the core_root directory."""
@@ -61,7 +61,8 @@ def main(args):
         wrappers.append(NormalizeFeaturesWrapper)
 
     iterations = args.iterations if args.iterations is not None else 1_000_000
-    path = rl.train(args.mch, args.core_root, training_methods, output_dir, iterations=iterations,
+    spmi_context = SuperPmiContext(mch=args.mch, core_root=args.core_root)
+    path = rl.train(spmi_context, training_methods, output_dir, iterations=iterations,
                     parallel=args.parallel, wrappers=wrappers)
 
     print(f"Model saved to: {path}")

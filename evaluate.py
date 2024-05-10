@@ -200,7 +200,7 @@ def main(args):
             if not SuperPmiCache.exists:
                 print(f"Caching SuperPmi methods for {args.mch}, this may take several minutes...")
 
-            cache = SuperPmiCache(superpmi)
+            cache = SuperPmiCache(args.mch, args.core_root)
 
             # load the underlying model
             jitrl = JitCseModel(args.algorithm)
