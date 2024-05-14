@@ -111,9 +111,15 @@ def parse_args():
 
 def main(args):
     """Main entry point."""
-    is_classification = args.kind == "classification"
+    density = "_".join(str(x) for x in args.layer_density)
+    model_path = os.path.join(args.save, f"{args.kind}_{density}_{args.optimizer}_{args.loss}.keras")
+
+    if os.path.exists(model_path):
+        print(f"Model {model_path} already exists.")
+        return
 
     # get the data
+    is_classification = args.kind == "classification"
     df = get_individual_cse_perf(args.mch, args.core_root)
     df = sanitize_data(df, is_classification)
 
@@ -139,18 +145,19 @@ def main(args):
     print(f"Test Accuracy: {test_acc:.4f}")
 
     if args.save:
-        if not os.path.exists(args.save):
-            os.makedirs(args.save)
+        save(args, model_path, scaler, model, hist, train_acc, test_acc)
 
-        density = "_".join(str(x) for x in args.layer_density)
-        model_path = os.path.join(args.save, f"{args.kind}_{density}_{args.optimizer}_{args.loss}.keras")
+def save(args, model_path, scaler, model, hist, train_acc, test_acc):
+    """Save the model, scaler, and history."""
+    if not os.path.exists(args.save):
+        os.makedirs(args.save)
 
-        model.save(model_path)
-        joblib.dump(scaler, model_path.replace(".h5", ".scale"))
-        joblib.dump(hist.history, model_path.replace(".h5", ".hist"))
+    model.save(model_path)
+    joblib.dump(scaler, model_path.replace(".h5", ".scale"))
+    joblib.dump(hist.history, model_path.replace(".h5", ".hist"))
 
-        with open(f"{os.path.join(args.save, args.kind)}.txt", "a", encoding="utf8") as f:
-            f.write(f"{args.kind} {args.layer_density} {args.optimizer} {args.loss} {train_acc},{test_acc}\n")
+    with open(f"{os.path.join(args.save, args.kind)}.txt", "a", encoding="utf8") as f:
+        f.write(f"{args.kind} {args.layer_density} {args.optimizer} {args.loss} {train_acc},{test_acc}\n")
 
 
 if __name__ == '__main__':
