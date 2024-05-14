@@ -1,13 +1,18 @@
 #!/usr/bin/python
 """Train a classification and regression model to predict CSE effectiveness."""
 
+# pylint: disable=import-error
+# pylint: disable=no-member
+# pylint: disable=no-name-in-module
 
 import argparse
+import os
 from typing import List
+import joblib
 
 from pandas import DataFrame, get_dummies
 import tensorflow as tf
-from tensorflow.keras import layers
+from tensorflow.keras.layers import Dense # type: ignore
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
@@ -26,24 +31,11 @@ CSE_SUCCESS_THRESHOLD = -5.0
 CORRELATION_THRESHOLD = 0.01
 
 # We will use a 90/10 train/test split.
-TRAIN_TEST_SPLIT = 0.1
+TRAIN_TEST_SPLIT = 0.2
 
-def parse_args():
-    """usage:  classification.py [-h] [--core_root CORE_ROOT] [--parallel n] mch"""
-    parser = argparse.ArgumentParser()
-    parser.add_argument("mch", help="The mch file of functions to train on.")
-    parser.add_argument("--core_root", default=None, help="The coreclr root directory.")
-    parser.add_argument("--layer-density", type=str, default="32,32", help="The number of neurons in each layer.")
-    parser.add_argument("--optimizer", type=str, default="adam", help="The optimizer to use.")
-    parser.add_argument("--loss", type=str, default="binary_crossentropy", help="The loss function to use.")
-    parser.add_argument("--epochs", type=int, default=100, help="The number of epochs to train for.")
-    parser.add_argument("--kind", type=str, default="classification",
-                        help="The kind of model to train (classifcation | regression).")
-
-    args = parser.parse_args()
-    args.core_root = validate_core_root(args.core_root)
-    args.layer_density = [int(x) for x in args.layer_density.split(",")]
-    return args
+# Targets to stop training.  These are from the random forest results in notebook/00_random_forest.ipynb.
+CLASSIFICATION_TARGET = 0.98
+REGRESSION_TARGET = 0.96
 
 def sanitize_data(df : DataFrame, is_classification) -> DataFrame:
     """Sanitize the data for training based on the kind of model."""
@@ -61,54 +53,104 @@ def sanitize_data(df : DataFrame, is_classification) -> DataFrame:
     result.drop(columns=to_drop, inplace=True)
     return result
 
-def build_model(input_size : int, layer_density : List[int], optimizer : str, loss : str, is_classification : bool):
-    """Build a model of the requested structure."""
-
-    l = []
-    for size in layer_density:
-        if layers:
-            l.append(layers.Dense(size, activation='relu'))
-        else:
-            l.append(layers.Dense(size, input_shape=(input_size,), activation='relu'))
-
-    # either a binary classification or a regression
-    if is_classification:
-        l.append(layers.Dense(1, activation='sigmoid'))
-    else:
-        l.append(layers.Dense(1))
-
-    model = tf.keras.Sequential(l)
-    model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy'])
-
-    return model
-
-
-def main(args):
-    """Main entry point."""
-
-    # get the data
-    df = get_individual_cse_perf(args.mch, args.core_root)
-    df = sanitize_data(df, args.kind == "classification")
-
+def split_and_scale(df):
+    """Split the data into training and testing sets, scale the data with StandardScaler."""
     x, y = df.drop(columns=['target']), df['target']
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=TRAIN_TEST_SPLIT)
-
-    print(f"Training on {len(x_train)} samples, testing on {len(x_test)} samples.")
 
     scaler = StandardScaler()
     x_train = scaler.fit_transform(x_train)
     x_test = scaler.transform(x_test)
+    return scaler, x_train, x_test, y_train, y_test
+
+def build_model(input_size : int, layer_density : List[int], optimizer : str, loss : str, is_classification : bool):
+    """Build a model of the requested structure."""
+
+    layers = []
+    for size in layer_density:
+        if layers:
+            layers.append(Dense(size, activation='relu'))
+        else:
+            layers.append(Dense(size, input_shape=(input_size,), activation='relu'))
+
+    # either a binary classification or a regression
+    if is_classification:
+        layers.append(Dense(1, activation='sigmoid'))
+    else:
+        layers.append(Dense(1))
+
+    model = tf.keras.Sequential(layers)
+
+    metrics = ['accuracy'] if is_classification else [tf.keras.metrics.RootMeanSquaredError()]
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+
+    return model
+
+def parse_args():
+    """usage:  classification.py [-h] [--core_root CORE_ROOT] [--parallel n] mch"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("mch", help="The mch file of functions to train on.")
+    parser.add_argument("--core_root", default=None, help="The coreclr root directory.")
+    parser.add_argument("--save", default=None, help="The directory to save the model to.")
+    parser.add_argument("--layer-density", type=str, default="32,32", help="The number of neurons in each layer.")
+    parser.add_argument("--optimizer", type=str, default="adam", help="The optimizer to use.")
+    parser.add_argument("--loss", type=str, default=None, help="The loss function to use.")
+    parser.add_argument("--epochs", type=int, default=100, help="The number of epochs to train for.")
+    parser.add_argument("--kind", type=str, default="classification",
+                        help="The kind of model to train (classifcation | regression).")
+    parser.add_argument("--batch-size", type=int, default=256, help="The batch size to use.")
+
+    args = parser.parse_args()
+    args.core_root = validate_core_root(args.core_root)
+    args.layer_density = [int(x) for x in args.layer_density.split(",")]
+
+    if args.loss is None:
+        args.loss = 'binary_crossentropy' if args.kind == "classification" else 'mean_squared_error'
+
+    return args
+
+def main(args):
+    """Main entry point."""
+    is_classification = args.kind == "classification"
+
+    # get the data
+    df = get_individual_cse_perf(args.mch, args.core_root)
+    df = sanitize_data(df, is_classification)
+
+    scaler, x_train, x_test, y_train, y_test = split_and_scale(df)
+
+    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau( factor=0.5, patience=10, min_lr=0.00001,
+        monitor='val_root_mean_squared_error' if not is_classification else 'val_accuracy')
 
     # build and fit the model
-    model = build_model(len(df.columns) - 1, args.layer_density, args.optimizer, args.loss, args.kind == "classification")
-    model.fit(x_train, y_train, epochs=args.epochs, validation_data=(x_test, y_test))
+    model = build_model(len(df.columns) - 1, args.layer_density, args.optimizer, args.loss, is_classification)
+    print(model.summary())
 
-    train_loss, train_acc = model.evaluate(x_train, y_train)
-    test_loss, test_acc = model.evaluate(x_test, y_test)
+    print(f"Training on {len(x_train)} samples, testing on {len(x_test)} samples.")
+    print(f"Layers: {args.layer_density}, Optimizer: {args.optimizer}, Loss: {args.loss}, Kind: {args.kind}")
+    hist = model.fit(x_train, y_train, epochs=args.epochs, validation_data=(x_test, y_test),
+                     batch_size=args.batch_size, callbacks=[reduce_lr])
+
+    # evaluate the model
+    _, train_acc = model.evaluate(x_train, y_train)
+    _, test_acc = model.evaluate(x_test, y_test)
 
     print(f"Train Accuracy: {train_acc:.4f}")
     print(f"Test Accuracy: {test_acc:.4f}")
 
+    if args.save:
+        if not os.path.exists(args.save):
+            os.makedirs(args.save)
+
+        density = "_".join(str(x) for x in args.layer_density)
+        model_path = os.path.join(args.save, f"{args.kind}_{density}_{args.optimizer}_{args.loss}.keras")
+
+        model.save(model_path)
+        joblib.dump(scaler, model_path.replace(".h5", ".scale"))
+        joblib.dump(hist.history, model_path.replace(".h5", ".hist"))
+
+        with open(f"{os.path.join(args.save, args.kind)}.txt", "a", encoding="utf8") as f:
+            f.write(f"{args.kind} {args.layer_density} {args.optimizer} {args.loss} {train_acc},{test_acc}\n")
 
 
 if __name__ == '__main__':
