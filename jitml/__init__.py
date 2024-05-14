@@ -4,6 +4,7 @@ from .superpmi import SuperPmiContext, SuperPmi, SuperPmiCache, MethodKind
 from .jit_cse import JitCseEnv
 from .machine_learning import JitCseModel
 from .wrappers import OptimalCseWrapper, NormalizeFeaturesWrapper
+from .cse_decisions import get_individual_cse_perf
 
 __all__ = [
     SuperPmi.__name__,
@@ -17,4 +18,5 @@ __all__ = [
     JitType.__name__,
     OptimalCseWrapper.__name__,
     NormalizeFeaturesWrapper.__name__,
+    get_individual_cse_perf.__name__
 ]
