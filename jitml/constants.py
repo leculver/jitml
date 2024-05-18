@@ -11,6 +11,8 @@ MAX_CSE = 16
 INVALID_ACTION_PENALTY = -0.05
 INVALID_ACTION_LIMIT = 20
 
+CSE_SUCCESS_THRESHOLD = -5.0
+
 def is_acceptable_for_cse(method):
     """Returns True if the method is acceptable for training on JitCseEnv."""
     applicable = len([x for x in method.cse_candidates if x.viable])
