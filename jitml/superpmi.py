@@ -126,6 +126,7 @@ class SuperPmi:
             if output.startswith(';'):
                 result = self._parse_method_context(output)
 
+        assert result is None or result.index == method_or_id
         return result
 
     def __translate_options(self, options:Dict[str,object]) -> List[str]:
@@ -254,6 +255,11 @@ class SuperPmiCache:
 
         self.test_methods, self.train_methods = self._get_test_train()
 
+    @property
+    def all_methods(self) -> List[MethodContext]:
+        """Gets all methods."""
+        return self.no_cse.keys() & self.heuristic.keys()
+
     def _get_test_train(self):
         split_file = SuperPmiCache._get_split_file(self.mch)
         if os.path.exists(split_file):
@@ -310,6 +316,9 @@ class SuperPmiCache:
         """Gets the perf score for the specified kind of method."""
         if isinstance(kind_or_cses, list) and len(kind_or_cses) == 0:
             kind_or_cses = MethodKind.NO_CSE
+
+        if isinstance(method_index, MethodContext):
+            method_index = method_index.index
 
         if isinstance(kind_or_cses, MethodKind):
             method = self._get_cache(kind_or_cses).get(method_index, None)
