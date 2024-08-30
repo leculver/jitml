@@ -3,6 +3,7 @@ src/coreclr/jit/optcse.cpp."""
 
 from enum import Enum
 from typing import List, Optional
+import numpy as np
 from pydantic import BaseModel, ValidationError, field_validator
 
 class JitType(Enum):
@@ -56,6 +57,18 @@ class CseCandidate(BaseModel):
     def can_apply(self):
         """Returns True if the candidate is viable and not applied."""
         return self.viable and not self.applied
+
+    def to_hashable_tensor(self, tolerance=1e-5):
+        """Returns a hashable tensor of the CSE candidate.  This is used for hashing and comparison."""
+        tensor = np.array([self.viable, self.live_across_call, self.const, self.shared_const, self.make_cse,
+                           self.has_call, self.containable, self.type, self.cost_ex, self.cost_sz, self.use_count,
+                           self.def_count, self.use_wt_cnt, self.def_wt_cnt, self.distinct_locals,
+                           self.local_occurrences, self.bb_count, self.block_spread, self.enreg_count
+                           ], dtype=np.float32)
+
+        # round to the nearest tolerance
+        return np.round(tensor / tolerance) * tolerance
+
 
 class MethodContext(BaseModel):
     """A superpmi method context."""
