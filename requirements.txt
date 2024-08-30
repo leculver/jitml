@@ -9,3 +9,5 @@ pylint
 pytest
 scikit-learn
 matplotlib
+pyarrow
+optuna
